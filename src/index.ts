@@ -42,14 +42,31 @@ function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
+const VALID_AUTH_MODES: readonly AuthMode[] = ['auto', 'cloud_basic', 'dc_pat'];
+
 function getConfig(): JiraConfig {
   const baseUrl = process.env.JIRA_BASE_URL;
   const token = process.env.JIRA_TOKEN;
-  const authMode = (process.env.JIRA_AUTH_MODE ?? 'auto') as AuthMode;
+  const rawAuthMode = process.env.JIRA_AUTH_MODE ?? 'auto';
   const email = process.env.JIRA_EMAIL;
+
+  if (!VALID_AUTH_MODES.includes(rawAuthMode as AuthMode)) {
+    throw new Error(`Invalid JIRA_AUTH_MODE "${rawAuthMode}". Must be one of: ${VALID_AUTH_MODES.join(', ')}`);
+  }
+  const authMode = rawAuthMode as AuthMode;
 
   if (!baseUrl) {
     throw new Error('Missing JIRA_BASE_URL');
+  }
+
+  try {
+    const scheme = new URL(baseUrl).protocol;
+    if (scheme !== 'https:' && scheme !== 'http:') {
+      throw new Error(`JIRA_BASE_URL must use http or https (got ${scheme})`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('must use http')) throw error;
+    throw new Error(`JIRA_BASE_URL is not a valid URL: ${baseUrl}`);
   }
 
   if (!token) {
@@ -105,22 +122,6 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-function formatErrorDetails(details: unknown): string {
-  if (details == null) {
-    return '';
-  }
-
-  if (typeof details === 'string') {
-    return details;
-  }
-
-  try {
-    return JSON.stringify(details, null, 2);
-  } catch {
-    return String(details);
-  }
-}
-
 function summarizeJson(data: unknown): string {
   try {
     return JSON.stringify(data, null, 2);
@@ -128,6 +129,8 @@ function summarizeJson(data: unknown): string {
     return String(data);
   }
 }
+
+const REQUEST_TIMEOUT_MS = 30_000;
 
 class JiraClient {
   private readonly config: JiraConfig;
@@ -152,7 +155,8 @@ class JiraClient {
     const response = await fetch(buildUrl(this.config, options.path, options.query), {
       method: options.method ?? 'GET',
       headers,
-      body
+      body,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
     const data = await parseResponseBody(response);
@@ -373,14 +377,38 @@ function toolResult(summary: string, structuredContent?: unknown): CallToolResul
   };
 }
 
+function sanitizeJiraError(details: unknown): string {
+  if (details == null || typeof details !== 'object') {
+    return '';
+  }
+
+  const obj = details as Record<string, unknown>;
+  const parts: string[] = [];
+
+  if (Array.isArray(obj.errorMessages)) {
+    parts.push(...obj.errorMessages.filter((m): m is string => typeof m === 'string'));
+  }
+
+  if (obj.errors && typeof obj.errors === 'object') {
+    for (const [field, msg] of Object.entries(obj.errors as Record<string, unknown>)) {
+      if (typeof msg === 'string') {
+        parts.push(`${field}: ${msg}`);
+      }
+    }
+  }
+
+  return parts.join('\n');
+}
+
 function toolError(error: unknown): CallToolResult {
   if (error instanceof JiraHttpError) {
+    const safeDetails = sanitizeJiraError(error.details);
     return {
       isError: true,
       content: [
         {
           type: 'text',
-          text: `${error.message}\n${formatErrorDetails(error.details)}`.trim()
+          text: safeDetails ? `${error.message}\n${safeDetails}` : error.message
         }
       ]
     };
@@ -398,6 +426,15 @@ async function withToolError(fn: () => Promise<CallToolResult>): Promise<CallToo
   } catch (error) {
     return toolError(error);
   }
+}
+
+let _client: JiraClient | null = null;
+
+function getClient(): JiraClient {
+  if (!_client) {
+    _client = new JiraClient(getConfig());
+  }
+  return _client;
 }
 
 const server = new McpServer(
@@ -421,7 +458,7 @@ server.registerTool(
   },
   async (): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.detectInstance();
       return toolResult(`Detected Jira deployment: ${String(data.deploymentType ?? 'Unknown')}`, data);
     })
@@ -436,7 +473,7 @@ server.registerTool(
   },
   async (): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.whoAmI();
       return toolResult(`Authenticated as ${String(data.displayName ?? data.name ?? data.accountId ?? 'unknown user')}`, data);
     })
@@ -453,7 +490,7 @@ server.registerTool(
   },
   async ({ maxResults }): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.listProjects(maxResults);
       return toolResult(`Fetched Jira projects.`, data);
     })
@@ -473,7 +510,7 @@ server.registerTool(
   },
   async ({ jql, maxResults, startAt, fields }): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.searchIssues({ jql, maxResults, startAt, fields });
       const issues = Array.isArray(data.issues) ? (data.issues as JsonObject[]) : [];
       const lines = issues.map(issueSummary);
@@ -499,7 +536,7 @@ server.registerTool(
   },
   async ({ issueKey, fields, expand }): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.getIssue(issueKey, fields, expand);
       return toolResult(issueSummary(data), data);
     })
@@ -516,7 +553,7 @@ server.registerTool(
   },
   async ({ fields }): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.createIssue(fields);
       return toolResult(`Created issue ${String(data.key ?? data.id ?? 'unknown')}`, data);
     })
@@ -539,7 +576,7 @@ server.registerTool(
         throw new Error('Provide at least one of fields or update.');
       }
 
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       await client.updateIssue(issueKey, fields, update);
       return toolResult(`Updated issue ${issueKey}.`);
     })
@@ -558,11 +595,11 @@ server.registerTool(
   },
   async ({ issueKey, bodyText, body }): Promise<CallToolResult> =>
     withToolError(async () => {
-      if (!bodyText && body === undefined) {
+      if (!bodyText && body == null) {
         throw new Error('Provide bodyText or body.');
       }
 
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.addComment(issueKey, bodyText, body);
       return toolResult(`Added comment to ${issueKey}.`, data);
     })
@@ -579,7 +616,7 @@ server.registerTool(
   },
   async ({ issueKey }): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       const data = await client.listTransitions(issueKey);
       const transitions = Array.isArray(data.transitions) ? (data.transitions as JsonObject[]) : [];
       const text =
@@ -604,7 +641,7 @@ server.registerTool(
   },
   async ({ issueKey, transitionId, fields, update }): Promise<CallToolResult> =>
     withToolError(async () => {
-      const client = new JiraClient(getConfig());
+      const client = getClient();
       await client.transitionIssue(issueKey, transitionId, fields, update);
       return toolResult(`Transitioned ${issueKey} using transition ${transitionId}.`);
     })
