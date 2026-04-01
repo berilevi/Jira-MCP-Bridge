@@ -8,11 +8,11 @@ Use this bridge when:
 
 - you have a Jira API token or personal access token
 - Jira does not expose an official MCP endpoint
-- Claude can launch a local MCP server
+- Claude/VS Code can launch a local MCP server
 
 The traffic flow is:
 
-`Claude -> local MCP server -> Jira REST API`
+`Claude/VS Code -> local MCP server -> Jira REST API`
 
 ## Jira Type: Cloud vs Data Center
 
@@ -58,12 +58,12 @@ export JIRA_EMAIL="you@example.com"
 export JIRA_TOKEN="your-api-token"
 ```
 
-### Jira Data Center / Server
+### Jira Data Center / Server 
 
 Set:
 
 ```bash
-export JIRA_BASE_URL="https://jira.example.com"
+export JIRA_BASE_URL="https://your-jira-instance"
 export JIRA_AUTH_MODE="dc_pat"
 export JIRA_TOKEN="your-personal-access-token"
 unset JIRA_EMAIL
