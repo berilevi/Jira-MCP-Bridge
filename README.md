@@ -101,6 +101,74 @@ claude mcp add jira-bridge -e JIRA_BASE_URL="$JIRA_BASE_URL" -e JIRA_AUTH_MODE="
 
 2. Or edit `.mcp.json` with your real values and let the client load the project MCP config.
 
+## VS Code + GitHub Copilot (Remote SSH)
+
+Use this setup when VS Code runs on a different machine and connects to the Linux host via Remote SSH.
+
+### Prerequisites
+
+- VS Code 1.99+ with **GitHub Copilot** and **GitHub Copilot Chat** extensions
+- `chat.mcp.enabled` set to `true` in VS Code settings
+- Remote SSH connected to the Linux host
+
+### 1. Clone and build on the remote host
+
+SSH into the host and run:
+
+```bash
+mkdir -p ~/projects && cd ~/projects
+git clone https://github.com/berilevi/Jira-MCP-Bridge.git
+cd Jira-MCP-Bridge
+npm install
+npm run build
+```
+
+### 2. Set credentials on the remote host
+
+Add to `~/.bashrc` on the remote machine:
+
+```bash
+export JIRA_BASE_URL="https://your-jira-instance"
+export JIRA_AUTH_MODE="dc_pat"          # or cloud_basic
+export JIRA_TOKEN="your-token"
+# export JIRA_EMAIL="you@example.com"   # only for cloud_basic
+```
+
+Then reload: `source ~/.bashrc`
+
+### 3. Configure MCP in VS Code
+
+With Remote SSH connected, run `Ctrl+Shift+P` → `MCP: Add Server` and fill in:
+
+- **Type:** stdio
+- **Command:** `node`
+- **Args:** `/home/<user>/projects/Jira-MCP-Bridge/dist/index.js`
+- **Name:** `jira-bridge`
+- **Save to:** Remote Settings
+
+This creates `/home/<user>/.vscode-server/data/User/mcp.json`:
+
+```json
+{
+  "servers": {
+    "jira-bridge": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/<user>/projects/Jira-MCP-Bridge/dist/index.js"]
+    }
+  }
+}
+```
+
+### 4. Verify and use
+
+- `Ctrl+Shift+P` → `MCP: List Servers` — confirm `jira-bridge` shows as running
+- Open Copilot Chat (`Ctrl+Alt+I`) → switch to **Agent** mode
+- Click the 🔧 tools icon in the input bar — `jira-bridge` tools will be listed
+- Ask naturally: *"show my open Jira tickets"* or *"what's the status of PROJ-123?"*
+
+> VS Code spawns the MCP server as a subprocess on the remote host, so it inherits the shell environment and picks up credentials automatically — no tokens needed in the config file.
+
 ## Notes
 
 - Keep tokens in environment variables where possible.
