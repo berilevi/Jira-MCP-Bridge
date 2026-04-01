@@ -2,13 +2,7 @@
   "mcpServers": {
     "jira-bridge": {
       "command": "node",
-      "args": ["dist/index.js"],
-      "env": {
-        "JIRA_BASE_URL": "https://your-domain.atlassian.net",
-        "JIRA_AUTH_MODE": "auto",
-        "JIRA_EMAIL": "you@example.com",
-        "JIRA_TOKEN": "replace-me"
-      }
+      "args": ["dist/index.js"]
     }
   }
 }
