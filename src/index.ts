@@ -500,7 +500,7 @@ server.registerTool(
   'jira_search_issues',
   {
     title: 'Search Issues',
-    description: 'Runs a JQL search and returns matching issues.',
+    description: 'Runs a JQL search and returns matching issues (tickets).',
     inputSchema: z.object({
       jql: z.string().min(1),
       maxResults: z.number().int().positive().max(100).default(10),
@@ -527,7 +527,7 @@ server.registerTool(
   'jira_get_issue',
   {
     title: 'Get Issue',
-    description: 'Fetches a Jira issue by key or ID.',
+    description: 'Fetches a Jira issue (ticket) by key or ID.',
     inputSchema: z.object({
       issueKey: z.string().min(1),
       fields: z.array(z.string()).optional(),
@@ -546,7 +546,7 @@ server.registerTool(
   'jira_create_issue',
   {
     title: 'Create Issue',
-    description: 'Creates a Jira issue from a raw Jira fields payload.',
+    description: 'Creates a Jira issue (ticket) from a raw Jira fields payload.',
     inputSchema: z.object({
       fields: z.record(z.string(), z.unknown())
     })
@@ -563,7 +563,7 @@ server.registerTool(
   'jira_update_issue',
   {
     title: 'Update Issue',
-    description: 'Updates a Jira issue using raw Jira fields and update payloads.',
+    description: 'Updates a Jira issue (ticket) using raw Jira fields and update payloads.',
     inputSchema: z.object({
       issueKey: z.string().min(1),
       fields: z.record(z.string(), z.unknown()).optional(),
@@ -586,7 +586,7 @@ server.registerTool(
   'jira_add_comment',
   {
     title: 'Add Comment',
-    description: 'Adds a comment to a Jira issue. Accepts plain text or a raw Jira body payload.',
+    description: 'Adds a comment to a Jira issue (ticket). Accepts plain text or a raw Jira body payload.',
     inputSchema: z.object({
       issueKey: z.string().min(1),
       bodyText: z.string().min(1).optional(),
@@ -609,7 +609,7 @@ server.registerTool(
   'jira_list_transitions',
   {
     title: 'List Transitions',
-    description: 'Lists valid workflow transitions for a Jira issue.',
+    description: 'Lists valid workflow transitions for a Jira issue (ticket).',
     inputSchema: z.object({
       issueKey: z.string().min(1)
     })
@@ -631,7 +631,7 @@ server.registerTool(
   'jira_transition_issue',
   {
     title: 'Transition Issue',
-    description: 'Moves a Jira issue through a workflow transition.',
+    description: 'Moves a Jira issue (ticket) through a workflow transition.',
     inputSchema: z.object({
       issueKey: z.string().min(1),
       transitionId: z.string().min(1),
