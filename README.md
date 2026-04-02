@@ -1,6 +1,6 @@
 # Jira MCP Bridge
 
-This project exposes Jira REST API operations as a local MCP server that Claude can use.
+This project exposes Jira REST API operations as a local MCP server that any AI agent can use.
 
 ## When To Use This
 
